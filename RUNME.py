@@ -1,4 +1,9 @@
 # Databricks notebook source
+# MAGIC %md
+# MAGIC # TODO UPDATE
+
+# COMMAND ----------
+
 # MAGIC %md This notebook sets up the companion cluster(s) to run the solution accelerator. It also creates the Workflow to illustrate the order of execution. Happy exploring! 
 # MAGIC 🎉
 # MAGIC
@@ -145,7 +150,7 @@ job_json = {
         ],
         "job_clusters": [
             {
-                "job_cluster_key": "mfg_qa_cluster",
+                "job_cluster_key": "ak_mfg_qa_cluster",
                 "new_cluster": {
                     "spark_version": "13.2.x-gpu-ml-scala2.12",
                 "spark_conf": {
@@ -161,7 +166,7 @@ job_json = {
                 }
             },
             {
-                "job_cluster_key": "mfg_qa_app_cluster",
+                "job_cluster_key": "ak_mfg_qa_app_cluster",
                 "new_cluster": {
                     "spark_version": "13.3.x-cpu-ml-scala2.12",
                 "spark_conf": {
