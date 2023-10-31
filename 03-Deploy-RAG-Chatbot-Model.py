@@ -34,7 +34,16 @@
 
 # COMMAND ----------
 
-# MAGIC %run ./_resources/00-init $catalog=akraemer $db=custom_llm_demo $reset_all_data=false
+dbutils.widgets.text("catalog", "akraemer", "Catalog")
+db = "custom_llm_demo"
+dbutils.widgets.text("company_name", "", "Company Name")
+
+company_name = dbutils.widgets.get("company_name")
+company_name = company_name.replace(' ', '_').lower()
+
+# COMMAND ----------
+
+# MAGIC %run ./_resources/00-init $catalog=$catalog $db=custom_llm_demo $reset_all_data=false
 
 # COMMAND ----------
 
@@ -58,12 +67,12 @@
 #init MLflow experiment
 import mlflow
 from mlflow import gateway
-init_experiment_for_batch("customer_llm", "financial_summary")
+
+init_experiment_for_batch("custom_llm_demo", company_name)
 
 gateway.set_gateway_uri(gateway_uri="databricks")
 
 mosaic_route_name = "mosaicml-llama2-70b-chat"
-
 try:
     route = gateway.get_route(mosaic_route_name)
 except:
@@ -150,13 +159,8 @@ print(r['candidates'][0]['message'])
 # COMMAND ----------
 
 import sys
-company_name = "American Airlines"
 
 prompt_base = f"You are an assistant for financial analysts at {company_name}. You are answering summary questions related to {company_name} by leveraging the transcript of a quarterly earnings call. If the question is not related to one of these topics, kindly decline to answer."
-
-# Check if company_name is equal to "UPDATE"
-if company_name == "UPDATE":
-    sys.exit("Execution stopped because company_name not updated.")
 
 # COMMAND ----------
 
@@ -186,7 +190,7 @@ class ChatbotRAG(mlflow.pyfunc.PythonModel):
     # Send a request to our Vector Search Index to retrieve similar content.
     def find_relevant_doc(self, question, num_results=1, relevant_threshold=0.66):
         results = self.vsc.get_index(
-            f"vs_catalog.{db}.customer_documentation_index"
+            f"vs_catalog.{db}.{company_name}_documentation_index"
         ).similarity_search(
             query_text=question, columns=["url", "content"], num_results=num_results
         )
@@ -261,7 +265,7 @@ print(results[0]["answer"])
 # COMMAND ----------
 
 from mlflow.models import infer_signature
-with mlflow.start_run(run_name="company_financial_transcript_rag") as run:
+with mlflow.start_run(run_name=f"{company_name}_financial_transcript_rag") as run:
     python_model = ChatbotRAG()
     #Let's try our model calling our Gateway API: 
     signature = infer_signature(["some", "data"], results)
@@ -274,20 +278,21 @@ print(run.info.run_id)
 # DBTITLE 1,Register our model to MLFlow
 #Enable Unity Catalog with MLflow registry
 mlflow.set_registry_uri('databricks-uc')
-model_name = f"{catalog}.{db}.company_financial_transcript"
+model_name = f"{company_name}_financial_transcript"
+full_model_name = f"{catalog}.{db}.{model_name}"
 
 client = MlflowClient()
 try:
   #Get the model if it is already registered to avoid re-deploying the endpoint
-  latest_model = client.get_model_version_by_alias(model_name, "prod")
-  print(f"Our model is already deployed on UC: {model_name}")
+  latest_model = client.get_model_version_by_alias(full_model_name, "prod")
+  print(f"Our model is already deployed on UC: {full_model_name}")
 except:  
   #Add model within our catalog
-  latest_model = mlflow.register_model(f'runs:/{run.info.run_id}/model', model_name)
-  client.set_registered_model_alias(name=model_name, alias="prod", version=latest_model.version)
+  latest_model = mlflow.register_model(f'runs:/{run.info.run_id}/model', full_model_name)
+  client.set_registered_model_alias(name=full_model_name, alias="prod", version=latest_model.version)
 
   #Make sure all other users can access the model for our demo(see _resource/00-init for details)
-  set_model_permission(f"{catalog}.{db}.company_financial_transcript", "ALL_PRIVILEGES", "account users")
+  set_model_permission(full_model_name, "ALL_PRIVILEGES", "account users")
 
 # COMMAND ----------
 
@@ -301,8 +306,8 @@ except:
 #Helper for the endpoint rest api, see details in _resources/00-init
 serving_client = EndpointApiClient()
 #Start the endpoint using the REST API (you can do it using the UI directly)
-serving_client.create_endpoint_if_not_exists("company_financial_transcript_rag", 
-                                            model_name=f"{catalog}.{db}.company_financial_transcript", 
+serving_client.create_endpoint_if_not_exists(model_name,
+                                            model_name=full_model_name, 
                                             model_version = latest_model.version, 
                                             workload_size="Small",
                                             scale_to_zero_enabled=True, 
@@ -310,7 +315,7 @@ serving_client.create_endpoint_if_not_exists("company_financial_transcript_rag",
                                             environment_vars={"DATABRICKS_TOKEN": "{{secrets/dbdemos/ai_gateway_service_principal}}"})
 
 #Make sure all users can access our endpoint for this demo
-set_model_endpoint_permission("company_financial_transcript_rag", "CAN_MANAGE", "users")
+set_model_endpoint_permission(model_name, "CAN_MANAGE", "users")
 
 # COMMAND ----------
 
@@ -325,7 +330,7 @@ set_model_endpoint_permission("company_financial_transcript_rag", "CAN_MANAGE", 
 import timeit
 question = "What was the revenue in q3?"
 
-answer = requests.post(f"{serving_client.base_url}/serving-endpoints/company_financial_transcript_rag/invocations", 
+answer = requests.post(f"{serving_client.base_url}/serving-endpoints/{model_name}/invocations", 
                        json={"dataframe_split": {'data': [question]}}, 
                        headers=serving_client.headers).json()
 

@@ -46,7 +46,16 @@
 
 # COMMAND ----------
 
-# MAGIC %run ./_resources/00-init $catalog=akraemer $db=custom_llm_demo $reset_all_data=false
+dbutils.widgets.text("catalog", "akraemer", "Catalog")
+db = "custom_llm_demo"
+dbutils.widgets.text("company_name", "", "Company Name")
+
+company_name = dbutils.widgets.get("company_name")
+company_name = company_name.replace(' ', '_').lower()
+
+# COMMAND ----------
+
+# MAGIC %run ./_resources/00-init $catalog=$catalog $db=custom_llm_demo $reset_all_data=false
 
 # COMMAND ----------
 
@@ -108,7 +117,7 @@
 #init MLflow experiment
 import mlflow
 from mlflow import gateway
-init_experiment_for_batch("llm-chatbot-rag", "rag-model")
+init_experiment_for_batch("custom_llm_demo", f"{company_name}-rag-model")
 
 gateway.set_gateway_uri(gateway_uri="databricks")
 #define our embedding route name, this is the endpoint we'll call for our embeddings
@@ -170,11 +179,6 @@ vsc = VectorSearchClientV2()
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC select current_catalog()
-
-# COMMAND ----------
-
 if not catalog_exists("vs_catalog"):
     print("creating Vector Search catalog")
     vsc.create_catalog("vs_catalog")
@@ -193,8 +197,8 @@ wait_for_vs_catalog_to_be_ready("vs_catalog")
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC SELECT * FROM customer_documentation
+clean_documentation_tbl_nm = f"{company_name}_documentation"
+display(spark.sql(f"SELECT * FROM {clean_documentation_tbl_nm}"))
 
 # COMMAND ----------
 
@@ -205,16 +209,16 @@ wait_for_vs_catalog_to_be_ready("vs_catalog")
 
 # COMMAND ----------
 
-# MAGIC %sql 
-# MAGIC ALTER TABLE customer_documentation SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+spark.sql(f"ALTER TABLE {clean_documentation_tbl_nm} SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
 
 # COMMAND ----------
 
 # DBTITLE 1,Creating the index
+#TODO make this wait to complete
 #The table we'd like to index
-source_table_fullname = f"{catalog}.{db}.customer_documentation"
+source_table_fullname = f"{catalog}.{db}.{clean_documentation_tbl_nm}"
 #Where we want to store our index
-vs_index_fullname = f"vs_catalog.{db}.customer_documentation_index"
+vs_index_fullname = f"vs_catalog.{db}.{clean_documentation_tbl_nm}_index"
 
 #Use this to reset your catalog/index 
 #vsc.delete_catalog("vs_catalog") #!!deleting the catalog will drop all the index!!
@@ -232,7 +236,7 @@ if not index_exists(vs_index_fullname):
     )
     sleep(3) #Set permission so that all users can access the demo index (shared)
     spark.sql(f'ALTER SCHEMA vs_catalog.{db} OWNER TO `account users`')
-    set_index_permission(f"vs_catalog.{db}.customer_documentation_index", "ALL_PRIVILEGES", "account users")
+    set_index_permission(vs_index_fullname, "ALL_PRIVILEGES", "account users")
     print(i)
 
 # COMMAND ----------

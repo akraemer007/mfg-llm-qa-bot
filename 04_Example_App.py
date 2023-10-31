@@ -19,6 +19,10 @@
 
 # COMMAND ----------
 
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 #TODO figure out what I need from configs
 
 # COMMAND ----------
@@ -28,7 +32,8 @@
 # COMMAND ----------
 
 # TODO pass this in
-company_name = "American Airlines"
+company_name_full = "American Airlines"
+company_name = company_name_full.replace(' ', '_').lower()
 
 # COMMAND ----------
 
@@ -41,29 +46,11 @@ import gradio as gr
 
 ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
 databricks_url = ctx.apiUrl().getOrElse(None)
-endpoint="company_financial_transcript_rag"
+endpoint=f"{company_name}_financial_transcript"
 endpoint_url = f"""{databricks_url}/serving-endpoints/{endpoint}/invocations"""
-
-
-# COMMAND ----------
 
 serving_client = EndpointApiClient()
 serving_client.get_inference_endpoint(endpoint)
-
-# COMMAND ----------
-
-import os
-import requests
-import numpy as np
-import pandas as pd
-import json
-import gradio as gr
-
-ctx = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
-databricks_url = ctx.apiUrl().getOrElse(None)
-endpoint = "company_financial_transcript_rag"
-endpoint_url = f"""{databricks_url}/serving-endpoints/{endpoint}/invocations"""
-
 
 def create_tf_serving_json(data):
     return {
@@ -90,7 +77,6 @@ def greet(question):
     answer = data[0]["answer"].replace("\n", " ").replace("<br/>", " ").replace("<br/><br/>", " ").replace("Answer: ", "")
 
     return answer
-greet("What was the revenue in q3")
 
 def srcshowfn(chkbox):
 
@@ -108,8 +94,8 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     with gr.Row():
         gr.Markdown(
             f"""
-            # {company_name} Financials Q&A Bot
-            This bot has been trained on publicly availible data from {company_name}. For the purposes of this demo, we have only downloaded the chemicals that start with the most recent quarter's transcrit. The application simply makes an API call to the model that's hosted in Databricks.
+            # {company_name_full} Financials Q&A Bot
+            This bot has been trained on publicly availible data from {company_name_full}. For the purposes of this demo, we have only downloaded the chemicals that start with the most recent quarter's transcript. The application simply makes an API call to the model that's hosted in Databricks.
             """
         )
     with gr.Row():
@@ -119,7 +105,7 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         )
     with gr.Row():
         output = gr.Textbox(label="Prediction")
-        greet_btn = gr.Button("Respond", size="sm", scale=0).style(height=20)
+        greet_btn = gr.Button("Respond", size="sm", scale=0)#.style(height=20)
     # with gr.Row(): # TODO add sources
     #     srcshow = gr.Checkbox(value=False, label='Show sources')
     # with gr.Row():
@@ -140,4 +126,4 @@ demo.launch(share=True)
 
 # COMMAND ----------
 
-
+greet_btn.
